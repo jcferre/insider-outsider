@@ -1,0 +1,941 @@
+---
+title: "Analisis de datos. Teoria Insider-Outsider"
+output: html_document
+date: "2024-08-07"
+---
+
+
+```{r include=FALSE}
+
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(haven)
+library(openxlsx)
+library(readr)
+library(ggplot2)
+library(gridExtra)
+```
+
+
+```{r include=FALSE}
+latino2023 <- read_dta("Merge_2023_LAPOP_AmericasBarometer_v1.0_w.dta")
+```
+
+
+```{r include=FALSE}
+# Ver las primeras filas del dataset
+head(latino2023)
+
+# Obtener un resumen de la base de datos
+summary(latino2023)
+
+# Contar los valores NA en las variables ocup4a y formal
+na_ocup4a <- sum(is.na(latino2023$ocup4a))
+na_formal <- sum(is.na(latino2023$formal))
+
+# Obtener el número total de observaciones
+total_obs <- nrow(latino2023)
+
+# Calcular la proporción de valores NA para cada variable
+prop_na_ocup4a <- na_ocup4a / total_obs
+prop_na_formal <- na_formal / total_obs
+
+# Mostrar resultados
+cat("Valores NA en ocup4a:", na_ocup4a, "\n")
+cat("Proporción de valores NA en ocup4a:", prop_na_ocup4a, "\n")
+cat("Valores NA en formal:", na_formal, "\n")
+cat("Proporción de valores NA en formal:", prop_na_formal, "\n")
+
+# Ver la proporción de valores NA en toda la base de datos
+na_counts <- colSums(is.na(latino2023))
+na_proportion <- na_counts / total_obs
+
+# Mostrar un resumen de las proporciones de NA
+summary(na_proportion)
+
+# Crear una nueva variable que clasifique a los individuos
+latino2023$economic_status <- NA
+
+# Clasificar "insiders" (1 y 2)
+latino2023$economic_status[latino2023$ocup4a %in% c(1, 2)] <- "insider"
+
+# Clasificar "outsiders" (3 y 7)
+latino2023$economic_status[latino2023$ocup4a %in% c(3, 7)] <- "outsider"
+
+# Clasificar aquellos fuera de la población económicamente activa (otros valores)
+latino2023$economic_status[is.na(latino2023$economic_status)] <- "not_economically_active"
+
+# Verificar la clasificación
+table(latino2023$economic_status)
+
+# Ver las primeras filas con la nueva variable
+head(latino2023[, c("ocup4a", "economic_status")])
+
+# Crear una nueva variable que categorice según economic_status y formal
+latino2023$formal_status <- ifelse(
+  latino2023$formal == 1, "formal",
+  ifelse(latino2023$formal == 2, "informal", NA)
+)
+
+# Crear una nueva variable que combine economic_status y formal_status
+latino2023$combined_status <- ifelse(
+  latino2023$economic_status == "insider" & latino2023$formal_status == "formal", "insider_formal",
+  ifelse(latino2023$economic_status == "insider" & latino2023$formal_status == "informal", "insider_informal",
+         ifelse(latino2023$economic_status == "outsider", "outsider",
+                ifelse(latino2023$economic_status == "not_economically_active", "not_economically_active", NA)))
+)
+
+# Verificar las primeras filas para asegurarnos de que la nueva variable se creó correctamente
+head(latino2023[, c("ocup4a", "formal", "economic_status", "formal_status", "combined_status")])
+
+# Contar la cantidad de cada categoría en combined_status
+status_counts <- table(latino2023$combined_status)
+
+# Calcular los porcentajes
+status_percentages <- prop.table(status_counts) * 100
+
+# Mostrar los porcentajes
+status_percentages
+```
+
+
+```{r include=FALSE}
+
+# Recategorizar la variable economic_status según las nuevas definiciones
+latino2023$economic_status <- ifelse(
+  latino2023$ocup4a %in% c(1, 2), "insider",
+  ifelse(latino2023$ocup4a %in% c(3, 7), "outsider",
+         ifelse(latino2023$ocup4a == 4, "estudiante",
+                ifelse(latino2023$ocup4a == 5, "ama_de_casa",
+                       ifelse(latino2023$ocup4a == 6, "jubilado",
+                              ifelse(latino2023$ocup4a %in% c(888888, 988888), "no_sabe_no_responde", NA)
+                       )
+                )
+         )
+  )
+)
+
+# Obtener un resumen de la nueva variable economic_status
+economic_status_summary <- table(latino2023$economic_status)
+
+# Mostrar el resumen
+print(economic_status_summary)
+
+# Recategorizar la variable economic_status según las nuevas definiciones y la variable formal
+latino2023$economic_status <- ifelse(
+  latino2023$ocup4a %in% c(1, 2) & latino2023$formal == 1, "insider",
+  ifelse(latino2023$ocup4a %in% c(1, 2) & latino2023$formal == 2, "outsider",
+         ifelse(latino2023$ocup4a %in% c(3, 7), "outsider",
+                ifelse(latino2023$ocup4a == 4, "estudiante",
+                       ifelse(latino2023$ocup4a == 5, "ama_de_casa",
+                              ifelse(latino2023$ocup4a == 6, "jubilado",
+                                     ifelse(latino2023$ocup4a %in% c(888888, 988888), "no_sabe_no_responde", NA)
+                              )
+                       )
+                )
+         )
+  )
+)
+
+# Obtener un resumen de la nueva variable economic_status
+economic_status_summary <- table(latino2023$economic_status)
+
+# Calcular los porcentajes
+economic_status_percentages <- prop.table(economic_status_summary) * 100
+
+# Mostrar los porcentajes
+print(economic_status_percentages)
+
+```
+
+
+```{r include=FALSE}
+# Filtrar los outsider
+outsiders <- latino2023 %>% filter(economic_status == "outsider")
+
+# Contar los que están buscando trabajo activamente (opción 3)
+buscando_trabajo_activamente <- sum(outsiders$ocup4a == 3, na.rm = TRUE)
+
+# Contar los que no trabajan y no están buscando trabajo (opción 7)
+no_trabaja_no_busca <- sum(outsiders$ocup4a == 7, na.rm = TRUE)
+
+# Mostrar resultados
+cat("Outsiders que están buscando trabajo activamente:", buscando_trabajo_activamente, "\n")
+cat("Outsiders que no trabajan y no están buscando trabajo:", no_trabaja_no_busca, "\n")
+
+```
+
+
+# Año 2023 latinoamerica en general 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Filtrar datos con valor válido para ros4 y categorías "insider" y "outsider"
+df_filtered <- latino2023 %>% 
+  filter(!is.na(ros4) & economic_status %in% c("insider", "outsider"))
+
+# Crear tabla de frecuencia cruzada
+freq_table <- table(df_filtered$economic_status, df_filtered$ros4)
+
+# Convertir a dataframe para ggplot2
+df_plot <- as.data.frame(freq_table)
+colnames(df_plot) <- c("economic_status", "ros4", "Freq")
+
+# Calcular proporciones
+df_plot <- df_plot %>%
+  group_by(economic_status) %>%
+  mutate(Prop = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot$economic_status <- factor(df_plot$economic_status, 
+                                  levels = c("insider", "outsider"),
+                                  labels = c("Insider", "Outsider"))
+
+# Graficar barras apiladas con etiquetas de porcentaje y leyendas mejoradas
+grafico_barras <- ggplot(df_plot, aes(fill=factor(ros4, levels=7:1), y=Prop, x=economic_status)) + 
+  geom_bar(position="stack", stat="identity", color="black", size=0.3) + 
+  geom_text(aes(label=sprintf("%.1f%%", Prop)), 
+            position=position_stack(vjust=0.5), size=3) +
+  scale_x_discrete(labels=c("Insider" = "Insider", 
+                            "Outsider" = "Outsider")) +
+  scale_fill_manual(values=c("#D7191C", "#FDAE61", "#FFFFBF", "#ABD9E9", "#2C7BB6", "#1A9641", "#A6D96A"), 
+                    labels=c("1" = "Muy en desacuerdo", "2", "3", "4", "5", "6", "7" = "Muy de acuerdo")) +
+  labs(title="Apoyo a las políticas para reducir la desigualdad", 
+       subtitle = "Latinoamerica 2023",
+       x="Grupo económico", 
+       y="Porcentaje", 
+       fill="Apoyo a las políticas para reducir la desigualdad", 
+       caption="Fuente: LAPOP (2023)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size=20, face="bold"),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=8),
+        plot.caption = element_text(hjust = 0, size=8))
+
+# Graficar tabla de frecuencias como gráfico de mosaico
+grafico_mosaico <- ggplot(df_plot, aes(x=ros4, y=economic_status)) +
+  geom_tile(aes(fill=Freq), color="white") +
+  geom_text(aes(label=Freq), color="black", size=3) +
+  scale_fill_gradient(low="white", high="blue") +
+  labs(title="Apoyo a políticas para reducir la desigualdad", 
+       x="Apoyo a políticas para reducir la desigualdad (2023)", 
+       y="Grupo económico", 
+       fill="Frecuencia") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=20, face="bold", hjust=0),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(size=8, hjust=0))  # Ajustar etiquetas y alineación de texto en Y
+
+# Mostrar los gráficos
+print(grafico_barras)
+print(grafico_mosaico)
+```
+### Agrupando 1-3 en "Desacuerdo" y 5-7 en "De acuerdo", 4 "Neutro"
+
+Figura 1
+
+```{r echo=FALSE}
+library(ggplot2)
+library(dplyr)
+
+# Datos preparados
+df_filtered <- latino2023 %>% 
+  filter(!is.na(ros4) & economic_status %in% c("insider", "outsider"))
+
+df_filtered <- df_filtered %>% 
+  mutate(ros4_recateg = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 >= 5 ~ "De acuerdo"
+  ))
+
+# Crear tabla de frecuencia cruzada
+freq_table <- table(df_filtered$economic_status, df_filtered$ros4_recateg)
+
+# Convertir a dataframe y calcular proporciones
+df_plot <- as.data.frame(freq_table)
+colnames(df_plot) <- c("economic_status", "ros4", "Freq")
+df_plot <- df_plot %>%
+  group_by(economic_status) %>%
+  mutate(Percent = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot$economic_status <- factor(df_plot$economic_status, levels = c("insider", "outsider"),
+                                  labels = c("Insider", "Outsider"))
+
+# Graficar
+grafico_barras <- ggplot(df_plot, aes(fill=ros4, y=Percent, x=economic_status)) + 
+  geom_bar(position="stack", stat="identity", color="black", size=0.3) + 
+  geom_text(aes(label=sprintf("%.1f%%", Percent)), position=position_stack(vjust=0.5), size=3) +
+  scale_fill_manual(values=c("Desacuerdo"="#D7191C", "Neutral"="#FFFFBF", "De acuerdo"="#2C7BB6")) +
+  labs(title="Apoyo a las políticas para reducir la desigualdad",
+       subtitle="Latinoamérica 2023",
+       x="",
+       y="Porcentaje",
+       fill="Nivel de acuerdo",
+       caption="Fuente: LAPOP (2023)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=14, face="bold"),
+        plot.subtitle = element_text(size=12),
+        axis.title.x = element_text(size=10),
+        axis.title.y = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1, size=8),
+        axis.text.y = element_text(size=8),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=8),
+        plot.caption = element_text(hjust=0, size=8))
+
+# Mostrar el gráfico
+print(grafico_barras)
+```
+Figura 1 LARR
+```{r}
+# Código de la Figura 1 con ggplot adaptado y tonos mejorados en escala de grises, dejando "Neutral" en blanco
+
+library(ggplot2)
+library(dplyr)
+
+# Datos preparados
+df_filtered <- latino2023 %>% 
+  filter(!is.na(ros4) & economic_status %in% c("insider", "outsider"))
+
+df_filtered <- df_filtered %>% 
+  mutate(ros4_recateg = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 >= 5 ~ "De acuerdo"
+  ))
+
+# Crear tabla de frecuencia cruzada
+freq_table <- table(df_filtered$economic_status, df_filtered$ros4_recateg)
+
+# Convertir a dataframe y calcular proporciones
+df_plot <- as.data.frame(freq_table)
+colnames(df_plot) <- c("economic_status", "ros4", "Freq")
+df_plot <- df_plot %>%
+  group_by(economic_status) %>%
+  mutate(Percent = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot$economic_status <- factor(df_plot$economic_status, levels = c("insider", "outsider"),
+                                  labels = c("Insider", "Outsider"))
+
+# Graficar adaptado en escala de grises y sin título
+grafico_barras <- ggplot(df_plot, aes(fill = ros4, y = Percent, x = economic_status)) + 
+  geom_bar(position = "stack", stat = "identity", color = "black", size = 0.3) + 
+  geom_text(aes(label = sprintf("%.1f%%", Percent)), position = position_stack(vjust = 0.5), size = 2.5, family = "Arial") +
+  scale_fill_manual(values = c("Desacuerdo" = "grey80", "Neutral" = "white", "De acuerdo" = "grey35")) +
+  labs(
+       x = "",
+       y = "Porcentaje",
+       fill = "Nivel de acuerdo",
+       caption = "Fuente: LAPOP (2023)") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(size = 9, family = "Arial"),
+    axis.title.y = element_text(size = 9, family = "Arial"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9, family = "Arial"),
+    axis.text.y = element_text(size = 9, family = "Arial"),
+    legend.title = element_text(size = 9, family = "Arial"),
+    legend.text = element_text(size = 9, family = "Arial"),
+    plot.caption = element_text(hjust = 0, size = 8, family = "Arial")
+  )
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig1.tiff", plot = grafico_barras, dpi = 1000, compression = "lzw", width = 8, height = 6, units = "in")
+
+# Mostrar el gráfico
+print(grafico_barras)
+```
+```{r include=FALSE}
+
+# Verificar la estructura de la base de datos
+str(latino2023)
+
+# Verificar los valores únicos en la variable pais
+unique(latino2023$pais)
+
+# Filtrar los datos para los países de interés
+paises_interes <- c(1, 15, 8, 13, 17)
+latino2023_filtrado <- latino2023 %>% filter(pais %in% paises_interes)
+
+# Resumir datos por país
+resumen_por_pais <- latino2023_filtrado %>%
+  group_by(pais) %>%
+  summarize(total_muestra = n(),
+    promedio_variable_interes = mean(l1n, na.rm = TRUE)  # Reemplaza "variable_interes" con la variable de interés
+  )
+
+# Ver el resumen
+print(resumen_por_pais)
+
+```
+
+```{r echo=FALSE}
+# Filtrar los datos para los países de interés
+paises_interes <- c(1, 15, 8, 13, 17)
+latino2023_filtrado <- latino2023 %>% filter(pais %in% paises_interes)
+
+# Filtrar datos con valor válido para ros4 y categorías "insider" y "outsider"
+df_filtered <- latino2023_filtrado %>% 
+  filter(!is.na(ros4) & economic_status %in% c("insider", "outsider"))
+
+# Crear tabla de frecuencia cruzada
+freq_table <- table(df_filtered$economic_status, df_filtered$ros4, df_filtered$pais)
+
+# Convertir a dataframe para ggplot2
+df_plot <- as.data.frame(freq_table)
+colnames(df_plot) <- c("economic_status", "ros4", "pais", "Freq")
+
+# Calcular porcentajes
+df_plot <- df_plot %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot$economic_status <- factor(df_plot$economic_status, 
+                                  levels = c("insider", "outsider"),
+                                  labels = c("Insider", "Outsider"))
+
+# Graficar barras apiladas con solo porcentajes
+grafico_barras <- ggplot(df_plot, aes(fill=factor(ros4, levels=7:1), y=Percent, x=economic_status)) + 
+  geom_bar(position="fill", stat="identity", color="black", size=0.3) + 
+  geom_text(aes(label=sprintf("%.1f%%", Percent)), 
+            position=position_fill(vjust=0.5), size=2.5, color="black") +
+  scale_fill_brewer(palette="Spectral", 
+                    labels=c("1" = "1 (Muy en desacuerdo)", 
+                             "2" = "2", 
+                             "3" = "3", 
+                             "4" = "4", 
+                             "5" = "5", 
+                             "6" = "6", 
+                             "7" = "7 (Muy de acuerdo)")) +
+  facet_wrap(~pais, labeller = as_labeller(c("1" = "México", "15" = "Brasil", "8" = "Colombia", "13" = "Chile", "17" = "Argentina"))) +
+  labs(title="Apoyo a políticas para reducir la desigualdad (x país) 2023", 
+       x="Grupo económico", 
+       y="Porcentaje", 
+       fill="Niveles de acuerdo", 
+       caption="Fuente: LAPOP (2023)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=14, face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Crear gráfico de cuadro de doble entrada para frecuencias separado por país
+grafico_mosaico <- ggplot(df_plot, aes(x=ros4, y=economic_status)) +
+  geom_tile(aes(fill=Freq), color="white") +
+  geom_text(aes(label=Freq), color="black", size=3) +
+  scale_fill_gradient(low="white", high="blue") +
+  facet_wrap(~pais, labeller = as_labeller(c("1" = "México", "15" = "Brasil", "8" = "Colombia", "13" = "Chile", "17" = "Argentina"))) +
+  labs(title="Frecuencia x apoyo a políticas y grupo económico (por país) 2023", 
+       x="Apoyo a políticas             Año 2023", 
+       y="Grupo económico", 
+       fill="Frecuencia") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=12, face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Mostrar los gráficos
+print(grafico_barras)
+print(grafico_mosaico)
+
+```
+
+
+```{r}
+# Definir los países de interés
+paises_interes <- c(1, 15, 8, 13, 17)
+
+# Filtrar los datos para los países de interés y las categorías "insider" y "outsider"
+latino2023_filtrado <- latino2023 %>%
+  filter(pais %in% paises_interes, economic_status %in% c("insider", "outsider"), !is.na(ros4))
+
+# Recategorización de ros4 para agrupar niveles de acuerdo
+latino2023_filtrado <- latino2023_filtrado %>%
+  mutate(ros4_grouped = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 >= 5 ~ "De acuerdo"
+  ))
+
+# Crear la tabla de frecuencia cruzada con la nueva categorización
+freq_table <- table(latino2023_filtrado$economic_status, latino2023_filtrado$ros4_grouped, latino2023_filtrado$pais)
+df_plot <- as.data.frame(freq_table)
+colnames(df_plot) <- c("economic_status", "ros4", "pais", "Freq")
+df_plot <- df_plot %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot$economic_status <- factor(df_plot$economic_status, levels = c("insider", "outsider"), labels = c("Insider", "Outsider"))
+
+# Graficar barras apiladas con solo porcentajes
+grafico_barras <- ggplot(df_plot, aes(fill=ros4, y=Percent, x=economic_status)) + 
+  geom_bar(position="fill", stat="identity", color="black", size=0.3) +
+  geom_text(aes(label=sprintf("%.1f%%", Percent)), position=position_fill(vjust=0.5), size=3, color="black") +
+  scale_fill_manual(values=c("Desacuerdo"="#D7191C", "Neutral"="#FFFFBF", "De acuerdo"="#2C7BB6")) +
+  facet_wrap(~pais, labeller = as_labeller(c("1" = "México", "15" = "Brasil", "8" = "Colombia", "13" = "Chile", "17" = "Argentina"))) +
+  labs(title="Apoyo a políticas para reducir la desigualdad por país",
+       subtitle="Países de interés 2023",
+       x="",  # Remover 'Grupo económico'
+       y="Porcentaje",
+       fill="Nivel de acuerdo",
+       caption="Fuente: LAPOP (2023)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=14, face="bold"),
+        plot.subtitle = element_text(size=12),
+        axis.text.x = element_text(angle=45, hjust=1, size=10),  # Asegurar que las etiquetas están visibles y correctamente alineadas
+        axis.text.y = element_text(size=10),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=8),
+        plot.caption = element_text(size=8, hjust=0))
+
+# Mostrar el gráfico
+print(grafico_barras)
+```
+
+Figura 3
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Filtrar los datos para los países de interés, excluyendo Colombia
+paises_interes <- c(1, 15, 13, 17)
+latino2023_filtrado <- latino2023 %>%
+  filter(pais %in% paises_interes, !is.na(ros4), economic_status %in% c("insider", "outsider"))
+
+# Agrupar niveles de acuerdo
+latino2023_filtrado <- latino2023_filtrado %>%
+  mutate(ros4_grouped = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 >= 5 ~ "De acuerdo"
+  ))
+
+# Crear tabla de frecuencia cruzada y calcular porcentajes
+freq_table_grouped <- table(latino2023_filtrado$economic_status, latino2023_filtrado$ros4_grouped, latino2023_filtrado$pais)
+df_plot_grouped <- as.data.frame(freq_table_grouped)
+colnames(df_plot_grouped) <- c("economic_status", "ros4", "pais", "Freq")
+df_plot_grouped <- df_plot_grouped %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot_grouped$economic_status <- factor(df_plot_grouped$economic_status, levels = c("insider", "outsider"), labels = c("Insider", "Outsider"))
+
+# Graficar
+grafico_barras_grouped <- ggplot(df_plot_grouped, aes(fill=ros4, y=Percent, x=economic_status)) +
+  geom_bar(position="fill", stat="identity", color="black", size=0.3) +
+  geom_text(aes(label=sprintf("%.1f%%", Percent)), position=position_fill(vjust=0.5), size=2.5, color="black") +
+  scale_fill_manual(values=c("Desacuerdo"="#D7191C", "Neutral"="#FFFFBF", "De acuerdo"="#2C7BB6")) +
+  facet_wrap(~pais, scales = "free_y", labeller = as_labeller(c("1" = "México", "15" = "Brasil", "13" = "Chile", "17" = "Argentina"))) +
+  labs(title="Apoyo a políticas para reducir la desigualdad por país",
+       subtitle="Países de interés 2023",
+       x="",
+       y="Porcentaje",
+       fill="Niveles de acuerdo",
+       caption="Fuente: LAPOP (2023)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=14, face="bold"),
+        plot.subtitle = element_text(size=12),
+        axis.text.x = element_text(angle=45, hjust=1, size=10),  # Etiquetas del eje X inclinadas
+        axis.text.y = element_text(size=10),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=8),
+        plot.caption = element_text(size=8, hjust=0),
+        axis.title.y = element_text(size=10)) 
+
+# Mostrar el gráfico
+print(grafico_barras_grouped)
+```
+
+
+Figura 3 LARR
+```{r}
+# Código de la Figura 3 adaptado para cumplir con los requerimientos de la revista LARR y tonos mejorados en escala de grises
+
+# Filtrar los datos para los países de interés, excluyendo Colombia
+paises_interes <- c(1, 15, 13, 17)
+latino2023_filtrado <- latino2023 %>%
+  filter(pais %in% paises_interes, !is.na(ros4), economic_status %in% c("insider", "outsider"))
+
+# Agrupar niveles de acuerdo
+latino2023_filtrado <- latino2023_filtrado %>%
+  mutate(ros4_grouped = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 >= 5 ~ "De acuerdo"
+  ))
+
+# Crear tabla de frecuencia cruzada y calcular porcentajes
+freq_table_grouped <- table(latino2023_filtrado$economic_status, latino2023_filtrado$ros4_grouped, latino2023_filtrado$pais)
+df_plot_grouped <- as.data.frame(freq_table_grouped)
+colnames(df_plot_grouped) <- c("economic_status", "ros4", "pais", "Freq")
+df_plot_grouped <- df_plot_grouped %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot_grouped$economic_status <- factor(df_plot_grouped$economic_status, levels = c("insider", "outsider"), labels = c("Insider", "Outsider"))
+
+# Graficar barras apiladas adaptado en escala de grises y sin título
+grafico_barras_grouped <- ggplot(df_plot_grouped, aes(fill = ros4, y = Percent, x = economic_status)) +
+  geom_bar(position = "fill", stat = "identity", color = "black", size = 0.3) +
+  geom_text(aes(label = sprintf("%.1f%%", Percent)), position = position_fill(vjust = 0.5), size = 2.5, family = "Arial") +
+  scale_fill_manual(values = c("Desacuerdo" = "grey80", "Neutral" = "white", "De acuerdo" = "grey35")) +
+  facet_wrap(~pais, scales = "free_y", labeller = as_labeller(c("1" = "México", "15" = "Brasil", "13" = "Chile", "17" = "Argentina"))) +
+  labs(
+       x = "",  # Eliminar etiqueta del eje X
+       y = "Porcentaje", 
+       fill = "Niveles de acuerdo", 
+       caption = "Fuente: LAPOP (2023)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", family = "Arial"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9, family = "Arial"),
+    axis.text.y = element_text(size = 9, family = "Arial"),
+    legend.title = element_text(size = 9, family = "Arial"),
+    legend.text = element_text(size = 9, family = "Arial"),
+    plot.caption = element_text(hjust = 0, size = 8, family = "Arial")
+  )
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig3.tiff", plot = grafico_barras_grouped, dpi = 1000, compression = "lzw", width = 8, height = 6, units = "in")
+
+# Mostrar los gráficos
+print(grafico_barras_grouped)
+
+```
+```{r}
+# Definir los países de interés y cargar el dataset de Latinoamérica para el año 2019
+paises_interes <- c(1, 15, 8, 13, 17)
+latino2019 <- read_dta("2018 LAPOP AmericasBarometer Merge_v1.0_W.dta")
+
+# Crear la variable "economic_status" en el dataset antes de filtrar
+latino2019 <- latino2019 %>%
+  mutate(
+    economic_status = case_when(
+      ocup4a %in% c(1, 2) & formal == 1 ~ "insider",
+      ocup4a %in% c(1, 2) & formal == 2 ~ "outsider",
+      ocup4a %in% c(3, 7) ~ "outsider",
+      ocup4a == 4 ~ "estudiante",
+      ocup4a == 5 ~ "ama_de_casa",
+      ocup4a == 6 ~ "jubilado",
+      ocup4a %in% c(888888, 988888) ~ "ns_nc",
+      TRUE ~ "not_economically_active"
+    )
+  )
+
+# Filtrar los datos para los países de interés, categorías válidas de `ros4` y `economic_status`
+latino2019_filtrado <- latino2019 %>%
+  filter(pais %in% paises_interes, 
+         economic_status %in% c("insider", "outsider"),
+         !is.na(ros4)) %>%
+  mutate(
+    # Agrupar niveles de `ros4` en categorías de acuerdo
+    ros4_grouped = case_when(
+      ros4 %in% 1:3 ~ "Desacuerdo",
+      ros4 == 4 ~ "Neutral",
+      ros4 %in% 5:7 ~ "De acuerdo"
+    )
+  )
+
+# Crear tabla de frecuencia cruzada y convertir a DataFrame
+freq_table_2019 <- table(latino2019_filtrado$economic_status, latino2019_filtrado$ros4_grouped, latino2019_filtrado$pais)
+df_plot_2019 <- as.data.frame(freq_table_2019)
+colnames(df_plot_2019) <- c("economic_status", "ros4_grouped", "pais", "Freq")
+
+# Calcular porcentajes para cada grupo económico y país
+df_plot_2019 <- df_plot_2019 %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100) %>%
+  ungroup() %>%
+  mutate(
+    economic_status = factor(economic_status, levels = c("insider", "outsider"), labels = c("Insider", "Outsider"))
+  )
+
+# Etiquetas de países
+pais_labels <- c("1" = "México", "15" = "Brasil", "8" = "Colombia", "13" = "Chile", "17" = "Argentina")
+
+# Gráfico de barras apiladas (Agrupado)
+grafico_barras_2019 <- ggplot(df_plot_2019, aes(fill=ros4_grouped, y=Percent, x=economic_status)) + 
+  geom_bar(position="fill", stat="identity", color="black", size=0.3) + 
+  geom_text(aes(label=sprintf("%.1f%%", Percent)), position=position_fill(vjust=0.5), size=2.5, color="black") +
+  scale_fill_manual(values=c("Desacuerdo"="#D7191C", "Neutral"="#FFFFBF", "De acuerdo"="#2C7BB6")) +
+  facet_wrap(~pais, labeller = as_labeller(pais_labels)) +
+  labs(title="Apoyo a políticas para reducir la desigualdad por país (2019)",
+       x="", 
+       y="Porcentaje", 
+       fill="Niveles de acuerdo", 
+       caption="Fuente: LAPOP (2019)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=14, face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=8),
+        plot.caption = element_text(hjust = 0, size=8))
+
+# Gráfico mosaico para frecuencias
+grafico_mosaico_2019 <- ggplot(df_plot_2019, aes(x=ros4_grouped, y=economic_status)) +
+  geom_tile(aes(fill=Freq), color="white") +
+  geom_text(aes(label=Freq), color="black", size=3) +
+  scale_fill_gradient(low="white", high="blue") +
+  facet_wrap(~pais, labeller = as_labeller(pais_labels)) +
+  labs(title="Frecuencia de encuestados por apoyo a políticas y grupo económico (2019)", 
+       x="Apoyo a políticas (ros4)", 
+       y="Grupo económico", 
+       fill="Frecuencia") +
+  theme_minimal() +
+  theme(plot.title = element_text(size=12, face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Mostrar los gráficos
+print(grafico_barras_2019)
+print(grafico_mosaico_2019)
+
+```
+
+Figura 2 LARR
+
+```{r}
+
+# Filtrar los datos para los países de interés y las categorías "insider" y "outsider"
+paises_interes <- c(1, 15, 8, 13, 17)
+latino2019_filtrado <- latino2019 %>% 
+  filter(pais %in% paises_interes & economic_status %in% c("insider", "outsider"))
+
+# Filtrar datos válidos para ros4 en latino2019
+df_filtered_2019 <- latino2019_filtrado %>% filter(!is.na(ros4))
+
+# Agrupar niveles de acuerdo
+df_filtered_2019 <- df_filtered_2019 %>%
+  mutate(ros4_grouped = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 %in% 5:7 ~ "De acuerdo"
+  ))
+
+# Crear tabla de frecuencia cruzada para latino2019
+freq_table_2019 <- table(df_filtered_2019$economic_status, df_filtered_2019$ros4_grouped, df_filtered_2019$pais)
+
+# Convertir a dataframe para ggplot2 y calcular porcentajes
+df_plot_2019 <- as.data.frame(freq_table_2019)
+colnames(df_plot_2019) <- c("economic_status", "ros4", "pais", "Freq")
+df_plot_2019 <- df_plot_2019 %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100)
+
+# Ajustar etiquetas de los grupos económicos
+df_plot_2019$economic_status <- factor(df_plot_2019$economic_status, 
+                                       levels = c("insider", "outsider"),
+                                       labels = c("Insider", "Outsider"))
+
+# Graficar barras apiladas adaptado en escala de grises y sin título
+grafico_barras_2019 <- ggplot(df_plot_2019, aes(fill = ros4, y = Percent, x = economic_status)) + 
+  geom_bar(position = "fill", stat = "identity", color = "black", size = 0.3) + 
+  geom_text(aes(label = sprintf("%.1f%%", Percent)), 
+            position = position_fill(vjust = 0.5), size = 2.3, color = "black") +
+  scale_fill_manual(values = c("Desacuerdo" = "grey80", "Neutral" = "white", "De acuerdo" = "grey35")) +
+  facet_wrap(~pais, labeller = as_labeller(c("1" = "México", "15" = "Brasil", "8" = "Colombia", "13" = "Chile", "17" = "Argentina"))) +
+  labs(
+       x = "",  # Eliminar etiqueta del eje X
+       y = "Porcentaje", 
+       fill = "Niveles de acuerdo", 
+       caption = "Fuente: LAPOP (2019)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", family = "Arial"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9, family = "Arial"),
+    axis.text.y = element_text(size = 9, family = "Arial"),
+    legend.title = element_text(size = 9, family = "Arial"),
+    legend.text = element_text(size = 9, family = "Arial"),
+    plot.caption = element_text(hjust = 0, size = 8, family = "Arial")
+  )
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig2.tiff", plot = grafico_barras_2019, dpi = 1000, compression = "lzw", width = 8, height = 6, units = "in")
+
+# Mostrar los gráficos
+print(grafico_barras_2019)
+
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Filtrar los datos para los países de interés
+paises_interes <- c(1, 15, 8, 13, 17)
+latino2023_filtrado <- latino2023 %>% filter(pais %in% paises_interes)
+latino2019_filtrado <- latino2019 %>% filter(pais %in% paises_interes)
+
+# Recategorizar ros4 para 2019 y 2023
+latino2019_filtrado$ros4_recateg <- ifelse(latino2019_filtrado$ros4 %in% 1:3, "Desacuerdo", 
+                                           ifelse(latino2019_filtrado$ros4 == 4, "Neutral", "De acuerdo"))
+latino2023_filtrado$ros4_recateg <- ifelse(latino2023_filtrado$ros4 %in% 1:3, "Desacuerdo", 
+                                           ifelse(latino2023_filtrado$ros4 == 4, "Neutral", "De acuerdo"))
+
+# Preparar datos de 2019
+freq_table_2019 <- table(latino2019_filtrado$economic_status, latino2019_filtrado$ros4_recateg, latino2019_filtrado$pais)
+df_plot_2019 <- as.data.frame(freq_table_2019)
+colnames(df_plot_2019) <- c("economic_status", "ros4", "pais", "Freq")
+df_plot_2019 <- df_plot_2019 %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100, Año = 2019)
+
+# Preparar datos de 2023
+freq_table_2023 <- table(latino2023_filtrado$economic_status, latino2023_filtrado$ros4_recateg, latino2023_filtrado$pais)
+df_plot_2023 <- as.data.frame(freq_table_2023)
+colnames(df_plot_2023) <- c("economic_status", "ros4", "pais", "Freq")
+df_plot_2023 <- df_plot_2023 %>%
+  group_by(economic_status, pais) %>%
+  mutate(Percent = Freq / sum(Freq) * 100, Año = 2023)
+
+# Unir los datos de 2019 y 2023
+df_plot_combined <- bind_rows(df_plot_2019, df_plot_2023)
+df_plot_combined$economic_status <- factor(df_plot_combined$economic_status, 
+                                           levels = c("ama_de_casa", "estudiante", "jubilado", "no_sabe_no_responde", "insider", "outsider"),
+                                           labels = c("Ama de casa", "Estudiante", "Jubilado", "No sabe/No responde", "Insider", "Outsider"))
+
+# Etiquetas de países
+nombres_paises <- c("1" = "México", "15" = "Brasil", "8" = "Colombia", "13" = "Chile", "17" = "Argentina")
+
+
+
+```
+
+
+Figura 4
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# Asumiendo que las bases de datos 'latino2019' y 'latino2023' ya están cargadas y limpias
+# Preparar los datos
+paises_interes <- c(1, 15, 13, 17)  # Excluido 8 (Colombia)
+
+# Combina y filtra los datos de 2019 y 2023
+df_combined <- bind_rows(
+  latino2019 %>% mutate(Año = 2019),
+  latino2023 %>% mutate(Año = 2023)
+) %>% 
+  filter(pais %in% paises_interes, !is.na(ros4), economic_status %in% c("insider", "outsider"))
+
+# Recategorizar ros4
+df_combined <- df_combined %>% 
+  mutate(ros4_recateg = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 %in% 5:7 ~ "De acuerdo"
+  ))
+
+# Crear la tabla de frecuencia cruzada y calcular porcentajes
+df_plot_combined <- df_combined %>%
+  count(economic_status, ros4_recateg, pais, Año) %>% 
+  group_by(economic_status, pais, Año) %>% 
+  mutate(Percent = n / sum(n) * 100) %>%
+  ungroup()
+
+# Ajustar etiquetas de los grupos económicos
+df_plot_combined$economic_status <- factor(df_plot_combined$economic_status, 
+                                           levels = c("insider", "outsider"),
+                                           labels = c("Insider", "Outsider"))
+
+# Nombres de los países ajustados
+nombres_paises <- c("1" = "México", "15" = "Brasil", "13" = "Chile", "17" = "Argentina")
+
+# Graficar el cambio en el apoyo a políticas para reducir la desigualdad
+grafico_cambio <- ggplot(df_plot_combined, aes(x = factor(Año), y = Percent, fill = ros4_recateg)) +
+  geom_bar(position = "fill", stat = "identity", color = "black", size = 0.2) +  # Restaura las líneas negras
+  geom_text(aes(label = sprintf("%.1f%%", Percent)), position = position_fill(vjust = 0.5), size = 3, color = "black") +
+  scale_fill_manual(values = c("Desacuerdo" = "#D7191C", "Neutral" = "#FFFFBF", "De acuerdo" = "#2C7BB6")) +
+  facet_grid(economic_status ~ pais, labeller = labeller(pais = nombres_paises)) +  # Usar nombres_paises para etiquetas
+  labs(title = "Cambio en el apoyo a políticas para reducir la desigualdad por país",
+       subtitle = "Comparación año 2019 y 2023",
+       x = "",
+       y = "Porcentaje",
+       fill = "Niveles de acuerdo",
+       caption = "Fuente: LAPOP (2019, 2023)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 12),
+        plot.caption = element_text(size = 8, hjust = 0),
+        strip.text.x = element_text(size = 12))  # Ajuste el tamaño del texto de las etiquetas de país
+
+# Mostrar el gráfico
+print(grafico_cambio)
+
+
+
+```
+
+Figura 4 LARR
+
+```{r}
+# Código de la Figura 4 adaptado para cumplir con los requerimientos de la revista LARR y tonos mejorados en escala de grises
+
+library(ggplot2)
+library(dplyr)
+
+# Asumiendo que las bases de datos 'latino2019' y 'latino2023' ya están cargadas y limpias
+# Preparar los datos
+paises_interes <- c(1, 15, 13, 17)  # Excluido 8 (Colombia)
+
+# Combina y filtra los datos de 2019 y 2023
+df_combined <- bind_rows(
+  latino2019 %>% mutate(Año = 2019),
+  latino2023 %>% mutate(Año = 2023)
+) %>% 
+  filter(pais %in% paises_interes, !is.na(ros4), economic_status %in% c("insider", "outsider"))
+
+# Recategorizar ros4
+df_combined <- df_combined %>% 
+  mutate(ros4_recateg = case_when(
+    ros4 %in% 1:3 ~ "Desacuerdo",
+    ros4 == 4 ~ "Neutral",
+    ros4 %in% 5:7 ~ "De acuerdo"
+  ))
+
+# Crear la tabla de frecuencia cruzada y calcular porcentajes
+df_plot_combined <- df_combined %>%
+  count(economic_status, ros4_recateg, pais, Año) %>% 
+  group_by(economic_status, pais, Año) %>% 
+  mutate(Percent = n / sum(n) * 100) %>%
+  ungroup()
+
+# Ajustar etiquetas de los grupos económicos
+df_plot_combined$economic_status <- factor(df_plot_combined$economic_status, 
+                                           levels = c("insider", "outsider"),
+                                           labels = c("Insider", "Outsider"))
+
+# Nombres de los países ajustados
+nombres_paises <- c("1" = "México", "15" = "Brasil", "13" = "Chile", "17" = "Argentina")
+
+# Graficar el cambio en el apoyo a políticas para reducir la desigualdad
+grafico_cambio <- ggplot(df_plot_combined, aes(x = factor(Año), y = Percent, fill = ros4_recateg)) +
+  geom_bar(position = "fill", stat = "identity", color = "black", size = 0.2) +  # Restaurar líneas negras
+  geom_text(aes(label = sprintf("%.1f%%", Percent)), position = position_fill(vjust = 0.5), size = 2.5, family = "Arial") +
+  scale_fill_manual(values = c("Desacuerdo" = "grey80", "Neutral" = "white", "De acuerdo" = "grey35")) +
+  facet_grid(economic_status ~ pais, labeller = labeller(pais = nombres_paises)) +  # Usar nombres_paises para etiquetas
+  labs(
+       x = "",
+       y = "Porcentaje",
+       fill = "Niveles de acuerdo",
+       caption = "Fuente: LAPOP (2019, 2023)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", family="Arial"),
+    plot.subtitle = element_text(size = 12, family="Arial"),
+    plot.caption = element_text(size = 8, hjust = 0, family="Arial"),
+    strip.text.x = element_text(size = 9, family="Arial"),
+    axis.text.x = element_text(size = 9, family="Arial"),
+    axis.text.y = element_text(size = 9, family="Arial"),
+    legend.title = element_text(size = 9, family="Arial"),
+    legend.text = element_text(size = 9, family="Arial")
+  )
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig4.tiff", plot = grafico_cambio, dpi = 1000, compression = "lzw", width = 8, height = 6, units = "in")
+
+# Mostrar el gráfico
+print(grafico_cambio)
+
+
+```
+

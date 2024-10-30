@@ -1,0 +1,624 @@
+---
+title: "Análisis de datos Tendencias. Teoria Insiders y Outsiders"
+author: "Lautaro Nogueira"
+date: "2024-08-08"
+output: html_document
+---
+
+```{r}
+# Cargar las librerías necesarias
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+library(stringr)
+
+```
+
+
+```{r}
+# Cargar la base de datos de febrero
+base_febrero <- read_excel("Base Nacional 240229 OL pond.xlsx")
+
+# Renombrar variables en base_febrero para estandarizar
+colnames_base_febrero <- colnames(base_febrero)
+
+# Renombrar variables si existen en los nombres de columnas
+variables_a_renombrar <- c("sensación", "oposición", "kirchner", "villarruel", "ley")
+nuevos_nombres <- c("sensacion", "oposicion", "cfk", "villaruel", "ley_omnibus")
+
+for (i in seq_along(variables_a_renombrar)) {
+  if (variables_a_renombrar[i] %in% colnames_base_febrero) {
+    base_febrero <- base_febrero %>%
+      rename(!!nuevos_nombres[i] := !!sym(variables_a_renombrar[i]))
+  }
+}
+
+# Crear la variable 'mercado_laboral' en base a 'ocup'
+base_febrero <- base_febrero %>%
+  mutate(mercado_laboral = case_when(
+    ocup %in% c("Jubilado", "Ama de casa", "Desocupado", "Estudiante") ~ "Fuera del mercado laboral",
+    TRUE ~ "Dentro del mercado laboral"
+  ))
+
+# Crear la variable 'grupo_economico' en base a 'mercado_laboral' y 'descuento'
+base_febrero <- base_febrero %>%
+  mutate(grupo_economico = case_when(
+    mercado_laboral == "Dentro del mercado laboral" & descuento %in% c("Si", "Los pago yo porque soy monotributista") ~ "Insiders",
+    mercado_laboral == "Dentro del mercado laboral" & descuento == "No" ~ "Outsiders",
+    ocup == "Desocupado" ~ "Outsiders",
+    ocup %in% c("Jubilado", "Ama de casa", "Estudiante") ~ ocup,
+    TRUE ~ NA_character_
+  ))
+
+# Asegurarse de que 'pond_final' no tenga valores NA
+base_febrero <- base_febrero %>%
+  mutate(pond_final = ifelse(is.na(pond_final), 0, pond_final))
+
+
+```
+
+```{r}
+# Filtrar y agrupar por grupos económicos y opiniones sobre hospitales
+opiniones_hospitales_base_febrero <- base_febrero %>%
+  filter(!is.na(hospitales), grupo_economico %in% c("Insiders", "Outsiders")) %>%
+  group_by(grupo_economico, hospitales) %>%
+  summarise(count = sum(pond_final, na.rm = TRUE), .groups = 'drop') %>%  # Aplicar la ponderación
+  group_by(grupo_economico) %>%
+  mutate(porcentaje = count / sum(count) * 100) %>%
+  ungroup()
+
+# Recodificar 'hospitales' para etiquetas más cortas
+opiniones_hospitales_base_febrero <- opiniones_hospitales_base_febrero %>%
+  mutate(hospitales = recode(hospitales,
+    "Que destinen mas presupuesto para que brinden una atención de calidad" = "Aumentar presupuesto",
+    "Que continúe igual. El que quiera mayor calidad puede hacerlo a través de su obra social o prepaga" = "Continúe igual",
+    "Que pasen a manos privadas, porque están cada vez peor" = "Manos privadas"
+  ))
+
+# Definir los colores para las categorías
+colores <- c(
+  "Aumentar presupuesto" = "#007FFF",  # Azul
+  "Continúe igual" = "#FF6347",        # Rojo
+  "Manos privadas" = "#32CD32"         # Verde
+)
+
+# Crear el gráfico con el título ajustado
+grafico_hospitales <- ggplot(opiniones_hospitales_base_febrero, aes(x = grupo_economico, y = porcentaje, fill = hospitales)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", size = 0.3) +
+  geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 3.5, color = "black") +
+  scale_fill_manual(values = colores) +
+  scale_y_continuous(labels = percent_format(scale = 1), limits = c(0, 80)) +
+  labs(title = "Opinión sobre hospitales",
+       subtitle = "Argentina, febrero 2024",
+       x = "",
+       y = "Porcentaje",
+       fill = "Preferencias",
+       caption = "Fuente: Colaboración de consultora Tendencias") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    plot.caption = element_text(size = 8, hjust = 0),
+    axis.text.x = element_text(angle = 10, hjust = 1)
+  )
+
+# Mostrar el gráfico
+print(grafico_hospitales)
+
+
+```
+
+
+Figura 5 LARR
+
+
+
+```{r}
+# Código de la Figura 5 adaptado para cumplir con los requerimientos de la revista LARR y tonos mejorados en escala de grises
+
+library(ggplot2)
+library(dplyr)
+
+# Filtrar y agrupar por grupos económicos y opiniones sobre hospitales
+opiniones_hospitales_base_febrero <- base_febrero %>%
+  filter(!is.na(hospitales), grupo_economico %in% c("Insiders", "Outsiders")) %>%
+  group_by(grupo_economico, hospitales) %>%
+  summarise(count = sum(pond_final, na.rm = TRUE), .groups = 'drop') %>%  # Aplicar la ponderación
+  group_by(grupo_economico) %>%
+  mutate(porcentaje = count / sum(count) * 100) %>%
+  ungroup()
+
+# Recodificar 'hospitales' para etiquetas más cortas
+opiniones_hospitales_base_febrero <- opiniones_hospitales_base_febrero %>%
+  mutate(hospitales = recode(hospitales,
+    "Que destinen mas presupuesto para que brinden una atención de calidad" = "Aumentar presupuesto",
+    "Que continúe igual. El que quiera mayor calidad puede hacerlo a través de su obra social o prepaga" = "Continúe igual",
+    "Que pasen a manos privadas, porque están cada vez peor" = "Manos privadas"
+  ))
+
+# Definir los colores en escala de grises
+colores <- c(
+  "Aumentar presupuesto" = "grey35",  # Gris oscuro
+  "Continúe igual" = "white",         # Blanco
+  "Manos privadas" = "grey80"         # Gris claro
+)
+
+# Crear el gráfico sin título y con escala de grises
+grafico_hospitales <- ggplot(opiniones_hospitales_base_febrero, aes(x = grupo_economico, y = porcentaje, fill = hospitales)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", size = 0.3) +
+  geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 2.5, color = "black") +
+  scale_fill_manual(values = colores) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 80)) +
+  labs(
+       x = "",
+       y = "Porcentaje",
+       fill = "Preferencias",
+       caption = "Fuente: Colaboración de consultora Tendencias") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", family="Arial"),
+    plot.subtitle = element_text(size = 12, family="Arial"),
+    plot.caption = element_text(size = 8, hjust = 0, family="Arial"),
+    axis.text.x = element_text(angle = 10, hjust = 1, size = 9, family="Arial"),
+    axis.text.y = element_text(size = 9, family="Arial"),
+    legend.title = element_text(size = 9, family="Arial"),
+    legend.text = element_text(size = 9, family="Arial"),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig5.tiff", plot = grafico_hospitales, dpi = 1000, compression = "lzw", width = 8, height = 6, units = "in")
+
+# Mostrar el gráfico
+print(grafico_hospitales)
+
+
+```
+
+
+
+
+```{r}
+# Función para analizar y graficar las opiniones sobre hospitales por edad
+analizar_opiniones_hospitales_edad <- function(base) {
+  
+  # Definir los colores dentro de la función
+  colores <- c(
+    "Aumentar presupuesto" = "#007FFF",  # Azul
+    "Continúe igual" = "#FF6347",        # Rojo
+    "Manos privadas" = "#32CD32"         # Verde
+  )
+  
+  # Filtrar categorías a excluir para edad
+  categorias_excluidas <- c("Menos de 16 años", "Menor de 16 años", "Menor de 18 años", "Otrx")
+  
+  # Filtrar datos válidos para edad
+  datos_filtrados <- base %>%
+    filter(!is.na(edad2), !is.na(hospitales),
+           !(edad2 %in% categorias_excluidas))
+  
+  # Verificar si el conjunto de datos está vacío
+  if (nrow(datos_filtrados) == 0) {
+    warning("El conjunto de datos está vacío después de aplicar los filtros para la variable edad2. Por favor, verifica los filtros y los datos.")
+    return(NULL)
+  }
+  
+  # Recodificar 'hospitales'
+  datos_filtrados <- datos_filtrados %>%
+    mutate(hospitales = recode(hospitales,
+      "Que destinen mas presupuesto para que brinden una atención de calidad" = "Aumentar presupuesto",
+      "Que continúe igual. El que quiera mayor calidad puede hacerlo a través de su obra social o prepaga" = "Continúe igual",
+      "Que pasen a manos privadas, porque están cada vez peor" = "Manos privadas"))
+  
+  # Calcular porcentajes
+  datos_agrupados <- datos_filtrados %>%
+    group_by(edad2, hospitales) %>%
+    summarise(count = sum(pond_final, na.rm = TRUE), .groups = "drop") %>%
+    group_by(edad2) %>%
+    mutate(porcentaje = count / sum(count) * 100) %>%
+    ungroup()
+  
+  # Crear el gráfico con el título ajustado
+  grafico <- ggplot(datos_agrupados, aes(x = edad2, y = porcentaje, fill = hospitales)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.9),
+             color = "black", size = 0.4) +
+    geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+              position = position_dodge(width = 0.9),
+              vjust = -0.6, size = 2.5, color = "black") +
+    scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 80)) +
+    scale_fill_manual(values = colores) +
+    labs(title = "Preferencias sobre hospitales públicos por edad",
+         subtitle = "Argentina, febrero 2024",
+         x = "",
+         y = "Porcentaje",
+         fill = "Preferencias",
+         caption = "Fuente: Colaboración de consultora Tendencias") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 14, face = "bold"),
+          plot.subtitle = element_text(size = 12),
+          plot.caption = element_text(size = 8, hjust = 0),
+          axis.text.x = element_text(angle = 10, hjust = 1))
+  
+  # Retornar el gráfico
+  return(grafico)
+}
+
+# Análisis utilizando 'edad2'
+resultado_hospitales_edad <- analizar_opiniones_hospitales_edad(base_febrero)
+
+if(!is.null(resultado_hospitales_edad)) {
+  print(resultado_hospitales_edad)
+}
+
+
+```
+
+Figura 7 LARR
+```{r}
+# Cargar librerías necesarias
+library(ggplot2)
+library(dplyr)
+library(scales)
+
+# Filtrar y preparar los datos para la variable 'edad2'
+datos_edad <- base_febrero %>%
+  filter(!is.na(edad2), !is.na(hospitales),
+         !(edad2 %in% c("Menos de 16 años", "Menor de 16 años", "Menor de 18 años", "Otrx"))) %>%
+  mutate(hospitales = recode(hospitales,
+    "Que destinen mas presupuesto para que brinden una atención de calidad" = "Aumentar presupuesto",
+    "Que continúe igual. El que quiera mayor calidad puede hacerlo a través de su obra social o prepaga" = "Continúe igual",
+    "Que pasen a manos privadas, porque están cada vez peor" = "Manos privadas"
+  ))
+
+# Definir colores en escala de grises
+colores <- c(
+  "Aumentar presupuesto" = "grey35",  # Gris oscuro
+  "Continúe igual"       = "white",   # Blanco
+  "Manos privadas"       = "grey80"   # Gris claro
+)
+
+# Calcular porcentajes
+datos_agrupados <- datos_edad %>%
+  group_by(edad2, hospitales) %>%
+  summarise(count = sum(pond_final, na.rm = TRUE), .groups = 'drop') %>%
+  group_by(edad2) %>%
+  mutate(porcentaje = count / sum(count) * 100) %>%
+  ungroup()
+
+# Crear el gráfico sin título y con colores en escala de grises
+grafico_edad <- ggplot(datos_agrupados, aes(x = edad2, y = porcentaje, fill = hospitales)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", size = 0.3) +
+  geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 2.5, color = "black", family = "Arial") +
+  scale_fill_manual(values = colores) +
+  scale_y_continuous(labels = percent_format(scale = 1), limits = c(0, 80)) +
+  labs(
+       x = "",
+       y = "Porcentaje",
+       fill = "Preferencias",
+       caption = "Fuente: Colaboración de consultora Tendencias") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 10, hjust = 1, size = 9, family = "Arial"),
+    axis.text.y = element_text(size = 9, family = "Arial"),
+    legend.title = element_text(size = 9, family = "Arial"),
+    legend.text = element_text(size = 9, family = "Arial"),
+    plot.caption = element_text(size = 8, hjust = 0, family = "Arial"),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+# Mostrar el gráfico
+print(grafico_edad)
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig7.tiff", plot = grafico_edad, dpi = 1000, compression = "lzw",
+       width = 8, height = 6, units = "in")
+
+
+
+```
+
+
+
+```{r}
+# Recodificar la variable 'escuela' para etiquetas más cortas
+base_febrero <- base_febrero %>%
+  mutate(escuela_recod = recode(escuela,
+    "Que aumenten el presupuesto en educación para garantizar educación pública de calidad para todos" = "Aumentar presupuesto",
+    "Que el Estado implemente un sistema de vouchers para que cada uno pueda elegir su escuela y pagar su educación" = "Sistema de vouchers",
+    "Que siga igual, el que quiera puede enviar sus hijos/as a la escuela privada y pagarlo con su plata" = "Continúe igual"
+  ))
+
+# Filtrar datos válidos y agrupar por grupo económico y opinión sobre escuelas
+opiniones_escuelas_grupo <- base_febrero %>%
+  filter(!is.na(escuela_recod), grupo_economico %in% c("Insiders", "Outsiders")) %>%
+  group_by(grupo_economico, escuela_recod) %>%
+  summarise(count = sum(pond_final, na.rm = TRUE), .groups = 'drop') %>%
+  group_by(grupo_economico) %>%
+  mutate(porcentaje = count / sum(count) * 100) %>%
+  ungroup()
+
+# Definir colores para las categorías
+colores_escuela <- c(
+  "Aumentar presupuesto" = "#007FFF",    # Azul
+  "Sistema de vouchers" = "#32CD32",     # Verde
+  "Continúe igual" = "#FF6347"           # Rojo
+)
+
+# Crear el gráfico con el título ajustado
+grafico_escuelas_grupo <- ggplot(opiniones_escuelas_grupo, aes(x = grupo_economico, y = porcentaje, fill = escuela_recod)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", size = 0.3) +
+  geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 3.5, color = "black") +
+  scale_fill_manual(values = colores_escuela) +
+  scale_y_continuous(labels = percent_format(scale = 1), limits = c(0, 80)) +
+  labs(title = "Opinión sobre escuelas",
+       subtitle = "Argentina, febrero 2024",
+       x = "",
+       y = "Porcentaje",
+       fill = "Preferencias",
+       caption = "Fuente: Colaboración de consultora Tendencias") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    plot.caption = element_text(size = 8, hjust = 0),
+    axis.text.x = element_text(angle = 10, hjust = 1)
+  )
+
+# Mostrar el gráfico
+print(grafico_escuelas_grupo)
+
+
+```
+Figura 6 LARR
+
+
+```{r}
+
+# Código de la Figura 6 adaptado para cumplir con los requerimientos de la revista LARR y tonos mejorados en escala de grises
+
+library(ggplot2)
+library(dplyr)
+
+# Recodificar la variable 'escuela' para etiquetas más cortas
+base_febrero <- base_febrero %>%
+  mutate(escuela_recod = recode(escuela,
+    "Que aumenten el presupuesto en educación para garantizar educación pública de calidad para todos" = "Aumentar presupuesto",
+    "Que el Estado implemente un sistema de vouchers para que cada uno pueda elegir su escuela y pagar su educación" = "Sistema de vouchers",
+    "Que siga igual, el que quiera puede enviar sus hijos/as a la escuela privada y pagarlo con su plata" = "Continúe igual"
+  ))
+
+# Filtrar datos válidos y agrupar por grupo económico y opinión sobre escuelas
+opiniones_escuelas_grupo <- base_febrero %>%
+  filter(!is.na(escuela_recod), grupo_economico %in% c("Insiders", "Outsiders")) %>%
+  group_by(grupo_economico, escuela_recod) %>%
+  summarise(count = sum(pond_final, na.rm = TRUE), .groups = 'drop') %>%
+  group_by(grupo_economico) %>%
+  mutate(porcentaje = count / sum(count) * 100) %>%
+  ungroup()
+
+# Definir colores en escala de grises
+colores_escuela <- c(
+  "Aumentar presupuesto" = "grey35",    # Gris oscuro
+  "Sistema de vouchers" = "white",      # Blanco
+  "Continúe igual" = "grey80"           # Gris claro
+)
+
+# Crear el gráfico sin título y con tonos de escala de grises
+grafico_escuelas_grupo <- ggplot(opiniones_escuelas_grupo, aes(x = grupo_economico, y = porcentaje, fill = escuela_recod)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", size = 0.3) +
+  geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 2.5, color = "black") +
+  scale_fill_manual(values = colores_escuela) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 80)) +
+  labs(
+       x = "",
+       y = "Porcentaje",
+       fill = "Preferencias",
+       caption = "Fuente: Colaboración de consultora Tendencias") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 10, hjust = 1, size = 9, family="Arial"),
+    axis.text.y = element_text(size = 9, family="Arial"),
+    legend.title = element_text(size = 9, family="Arial"),
+    legend.text = element_text(size = 9, family="Arial"),
+    plot.caption = element_text(size = 8, hjust = 0, family="Arial"),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig6.tiff", plot = grafico_escuelas_grupo, dpi = 1000, compression = "lzw", width = 8, height = 6, units = "in")
+
+# Mostrar el gráfico
+print(grafico_escuelas_grupo)
+
+```
+
+
+
+```{r}
+# Función para analizar y graficar las opiniones sobre escuelas por variable demográfica
+analizar_opiniones_escuela <- function(base, variable) {
+  
+  # Definir los colores
+  colores_escuela <- c(
+    "Aumentar presupuesto" = "#007FFF",    # Azul
+    "Sistema de vouchers" = "#32CD32",     # Verde
+    "Continúe igual" = "#FF6347"           # Rojo
+  )
+  
+  # Definir categorías a excluir según la variable
+  if (deparse(substitute(variable)) == "edad2") {
+    categorias_excluidas <- c("Menor de 16 años", "Menos de 16 años", "Otrx")
+  } else {
+    categorias_excluidas <- c()
+  }
+  
+  # Filtrar datos válidos
+  datos_filtrados <- base %>%
+    filter(!is.na({{ variable }}), !is.na(escuela_recod),
+           !({{ variable }} %in% categorias_excluidas))
+  
+  # Verificar si el conjunto de datos está vacío
+  if(nrow(datos_filtrados) == 0) {
+    warning("El conjunto de datos está vacío después de aplicar los filtros para la variable ", deparse(substitute(variable)), ". Por favor, verifica los filtros y los datos.")
+    return(NULL)
+  }
+  
+  # Calcular porcentajes
+  datos_agrupados <- datos_filtrados %>%
+    group_by({{ variable }}, escuela_recod) %>%
+    summarise(count = sum(pond_final, na.rm = TRUE), .groups = "drop") %>%
+    group_by({{ variable }}) %>%
+    mutate(porcentaje = count / sum(count) * 100) %>%
+    ungroup()
+  
+  # Crear el gráfico con el título ajustado
+  grafico <- ggplot(datos_agrupados, aes(x = {{ variable }}, y = porcentaje, fill = escuela_recod)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.9),
+             color = "black", size = 0.4) +
+    geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+              position = position_dodge(width = 0.9),
+              vjust = -0.6, size = 2.5, color = "black") +
+    scale_y_continuous(labels = percent_format(scale = 1), limits = c(0, 80)) +
+    scale_fill_manual(values = colores_escuela) +
+    labs(title = "Preferencias sobre escuela pública por edad",
+         subtitle = "Argentina, febrero 2024",
+         x = "",
+         y = "Porcentaje",
+         fill = "Preferencias",
+         caption = "Fuente: Colaboración de consultora Tendencias") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 14, face = "bold"),
+          plot.subtitle = element_text(size = 12),
+          plot.caption = element_text(size = 8, hjust = 0),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  # Retornar el gráfico
+  return(grafico)
+}
+
+# Ejecutar el análisis por edad
+resultado_escuela_edad2 <- analizar_opiniones_escuela(base_febrero, edad2)
+
+if(!is.null(resultado_escuela_edad2)) {
+  print(resultado_escuela_edad2)
+}
+
+
+```
+
+
+
+
+
+Figura 8 LARR
+
+```{r}
+# Cargar librerías necesarias
+library(ggplot2)
+library(dplyr)
+library(scales)
+
+# Filtrar y preparar los datos para la variable 'edad2'
+datos_escuela_edad <- base_febrero %>%
+  filter(!is.na(edad2), !is.na(escuela_recod),
+         !(edad2 %in% c("Menor de 16 años", "Menos de 16 años", "Otrx"))) %>%
+  mutate(escuela_recod = recode(escuela_recod,
+    "Que destinen mas presupuesto para que brinden una educación de calidad" = "Aumentar presupuesto",
+    "Que continúe igual. El que quiera mayor calidad puede hacerlo a través de la escuela privada" = "Continúe igual",
+    "Que se implemente un sistema de vouchers escolares, en donde el Estado financie al estudiante y no a la institución" = "Sistema de vouchers"
+  ))
+
+# Definir los colores en escala de grises
+colores <- c(
+  "Aumentar presupuesto" = "grey35",   # Gris oscuro
+  "Continúe igual"       = "white",    # Blanco
+  "Sistema de vouchers"  = "grey80"    # Gris claro
+)
+
+# Calcular porcentajes
+datos_agrupados <- datos_escuela_edad %>%
+  group_by(edad2, escuela_recod) %>%
+  summarise(count = sum(pond_final, na.rm = TRUE), .groups = 'drop') %>%
+  group_by(edad2) %>%
+  mutate(porcentaje = count / sum(count) * 100) %>%
+  ungroup()
+
+# Crear el gráfico sin título y en escala de grises
+grafico_escuela <- ggplot(datos_agrupados, aes(x = edad2, y = porcentaje, fill = escuela_recod)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", size = 0.3) +
+  geom_text(aes(label = sprintf("%.1f%%", porcentaje)),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 2.5, color = "black", family = "Arial") +
+  scale_fill_manual(values = colores) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 80)) +
+  labs(
+       x = "",
+       y = "Porcentaje",
+       fill = "Preferencias",
+       caption = "Fuente: Colaboración de consultora Tendencias") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9, family = "Arial"),
+    axis.text.y = element_text(size = 9, family = "Arial"),
+    legend.title = element_text(size = 9, family = "Arial"),
+    legend.text = element_text(size = 9, family = "Arial"),
+    plot.caption = element_text(size = 8, hjust = 0, family = "Arial"),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+# Mostrar el gráfico
+print(grafico_escuela)
+
+# Guardar el gráfico en formato TIFF para cumplir con los requerimientos
+ggsave("ApellidoAutor_Fig8.tiff", plot = grafico_escuela, dpi = 1000, compression = "lzw", width = 8, height = 6, units = "in")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
